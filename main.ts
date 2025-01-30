@@ -1,9 +1,20 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, ItemView, WorkspaceLeaf, MarkdownFileInfo } from 'obsidian';
-import { createElement, StrictMode } from 'react';
-import { createRoot, Root } from 'react-dom/client';
-import { ReactView } from './ReactView';
-import { AppContext } from './hooks';
-import { ErrorBoundary } from './ErrorBoundary';
+import React, { createContext, useContext } from 'react';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, ItemView, WorkspaceLeaf } from 'obsidian';
+import { createRoot } from 'react-dom/client'; // For React integration
+import RoutineBuilder from './RoutineBuilder'; // Adjust the path as necessary
+
+// AppContext for React
+const AppContext = createContext<App | null>(null);
+
+export const useApp = () => {
+    const context = useContext(AppContext);
+    if (!context) {
+        throw new Error('useApp must be used within an AppContext.Provider');
+    }
+    return context;
+};
+
+export { AppContext };
 
 // Define view type constant
 const VIEW_TYPE_EXAMPLE = 'example-view';
@@ -17,8 +28,8 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 }
 
 // Create ExampleView class for React integration
-class ExampleView extends ItemView {
-    root: Root | null = null;
+export class ExampleView extends ItemView {
+    private root: ReturnType<typeof createRoot> | undefined;
 
     constructor(leaf: WorkspaceLeaf) {
         super(leaf);
@@ -33,18 +44,21 @@ class ExampleView extends ItemView {
     }
 
     async onOpen() {
-        this.root = createRoot(this.containerEl.children[1]);
+        console.log("Opening ExampleView...");
+        const container = this.contentEl.createDiv();
+        this.root = createRoot(container);
+        
         this.root.render(
-            createElement(StrictMode, null,
-                createElement(AppContext.Provider, { value: this.app },
-                    createElement(ReactView)
-                )
+            React.createElement(AppContext.Provider, { value: this.app }, 
+                React.createElement(MyReactView, { app: this.app })
             )
         );
     }
-
+    
     async onClose() {
-        this.root?.unmount();
+        if (this.root) {
+            this.root.unmount(); // Unmount the React component when the view is closed
+        }
     }
 }
 
@@ -55,7 +69,7 @@ export default class MyPlugin extends Plugin {
         console.log('Loading plugin');
         await this.loadSettings();
 
-        // Register the custom view type
+        // Register the custom view type for React view
         this.registerView(
             VIEW_TYPE_EXAMPLE,
             (leaf: WorkspaceLeaf) => new ExampleView(leaf)
@@ -97,44 +111,23 @@ export default class MyPlugin extends Plugin {
             }
         });
 
-        // Previous plugin code...
         const statusBarItemEl = this.addStatusBarItem();
-        statusBarItemEl.setText('Status Bar Text');
+        statusBarItemEl.setText('Status Bar is active');
 
-        this.addCommand({
-            id: 'open-sample-modal-simple',
-            name: 'Open sample modal (simple)',
-            callback: () => {
-                new SampleModal(this.app).open();
-            }
-        });
-
-        this.addCommand({
-            id: 'sample-editor-command',
-            name: 'Sample editor command',
-            editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
-                if (ctx instanceof MarkdownView) {
-                    console.log(editor.getSelection());
-                    editor.replaceSelection('Sample Editor Command');
-                }
-            }
-        });
-
-        this.addSettingTab(new SampleSettingTab(this.app, this));
+        // Use the concrete class for settings tab
+        this.addSettingTab(new MySettingTab(this.app, this));
 
         this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-            console.log('click', evt);
+            console.log('Document clicked', evt);
         });
-
-        this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
     }
 
     async onunload() {
         console.log('Unloading plugin');
     }
 
-    // Helper method to activate the React view
     async activateView() {
+        console.log("Activating view...");
         const { workspace } = this.app;
         
         let leaf = workspace.getLeavesOfType(VIEW_TYPE_EXAMPLE)[0];
@@ -160,25 +153,26 @@ export default class MyPlugin extends Plugin {
         await this.saveData(this.settings);
     }
 }
-
-// Existing Modal and Settings classes remain unchanged
-class SampleModal extends Modal {
-    constructor(app: App) {
-        super(app);
-    }
-
-    onOpen() {
-        const { contentEl } = this;
-        contentEl.setText('Woah!');
-    }
-
-    onClose() {
-        const { contentEl } = this;
-        contentEl.empty();
-    }
+interface RoutineBuilderProps {
+    app: App;
 }
 
-class SampleSettingTab extends PluginSettingTab {
+// Define the props interface
+interface MyReactViewProps {
+    app: App; // Assuming 'App' is the type of the app instance
+}
+
+// Rename the local component to avoid conflict
+const MyReactView: React.FC<MyReactViewProps> = ({ app }) => {
+    const appContext = useApp();
+
+    return React.createElement("div", null, 
+        React.createElement("h1", null, `Vault name: ${appContext.vault.getName()}`),
+        React.createElement(RoutineBuilder as React.ComponentType<RoutineBuilderProps>, { app: appContext })
+    );
+};
+
+class MySettingTab extends PluginSettingTab {
     plugin: MyPlugin;
 
     constructor(app: App, plugin: MyPlugin) {

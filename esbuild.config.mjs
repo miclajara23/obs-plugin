@@ -1,6 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
+import sveltePlugin from "esbuild-svelte";
 
 const banner =
 `/*
@@ -40,6 +41,7 @@ const context = await esbuild.context({
 	outfile: "main.js",
 	minify: prod,
 	jsx: "automatic",
+	plugins: [sveltePlugin()],
 });
 
 if (prod) {
